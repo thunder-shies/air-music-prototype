@@ -141,10 +141,10 @@ const AirMusicVisualizer = () => {
             // Function to load AQI data for the current city
             async function loadAQIData() {
                 const locations = {
-                    'Bangkok': `http://api.airvisual.com/v2/city?city=Bangkok&state=Bangkok&country=Thailand&key=${API_KEY}`,
-                    'HongKong': `http://api.airvisual.com/v2/city?city=Hong Kong&state=Hong Kong&country=Hong Kong&key=${API_KEY}`,
+                    'Bangkok': `https://api.airvisual.com/v2/city?city=Bangkok&state=Bangkok&country=Thailand&key=${API_KEY}`,
+                    'HongKong': `https://api.airvisual.com/v2/city?city=Hong Kong&state=Hong Kong&country=Hong Kong&key=${API_KEY}`,
                     'Beijing': `https://api.airvisual.com/v2/city?city=Beijing&state=Beijing&country=China&key=${API_KEY}`,
-                    'Melbourne': `http://api.airvisual.com/v2/city?city=Melbourne&state=Victoria&country=Australia&key=${API_KEY}`,
+                    'Melbourne': `https://api.airvisual.com/v2/city?city=Melbourne&state=Victoria&country=Australia&key=${API_KEY}`,
                 };
 
                 try {
