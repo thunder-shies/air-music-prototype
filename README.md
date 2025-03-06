@@ -1,12 +1,21 @@
-# React + Vite
+# Airphonic
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+### **Project Summary: Airphonic – Sonifying Air Quality**  
 
-Currently, two official plugins are available:
+**Airphonic** is an interactive web-based application that transforms **real-time air quality data** into **dynamic musical compositions**. By using **data sonification**, the project maps **multiple pollutants** to various **musical parameters** such as pitch, tempo, and harmony.  
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Harmonious and pleasant sounds** indicate **clean air**.  
+- **Dissonant or distorted sounds** reflect **higher pollution levels**.  
+- The application features **custom timbres and mood settings** based on **Hong Kong and Bangkok** air quality data.  
 
-## Expanding the ESLint configuration
+### **Technical Overview**  
+- **Frontend:** React, Vite, p5.js, Tone.js for interactive visuals & music generation.  
+- **Backend:** Node.js, Express, Fetch API to retrieve air quality data from **OpenAQ**.  
+- **Deployment:**  
+  - **Frontend** on **GitHub Pages**  
+  - **Backend** on **Render (Node.js API proxy for OpenAQ)**  
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### **Exhibition & User Interaction**  
+- Users can **select different locations** and hear how air pollution affects sound.  
+- **Real-time sonification** makes air quality **tangible and engaging**.  
+- Future plans include **interactive elements** where users can "clean" the air through movement or sound input.  
