@@ -31,6 +31,81 @@ if (!process.env.IQAIR_API_KEY) {
     console.error("Make sure you have a .env file with IQAIR_API_KEY defined");
 }
 
+// Simple in-memory cache
+const cache = {
+    data: {},
+    timestamps: {}
+};
+
+// Cache configuration
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+// Rate limiting configuration
+const rateLimits = {
+    openAQ: {
+        lastRequest: 0,
+        minInterval: 2000 // 2 seconds between requests
+    },
+    iqAir: {
+        lastRequest: 0,
+        minInterval: 5000 // 5 seconds between requests
+    }
+};
+
+// Helper function to check and enforce rate limits
+const checkRateLimit = async (service) => {
+    const now = Date.now();
+    const timeSinceLastRequest = now - rateLimits[service].lastRequest;
+
+    if (timeSinceLastRequest < rateLimits[service].minInterval) {
+        // Need to wait before making another request
+        const waitTime = rateLimits[service].minInterval - timeSinceLastRequest;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+
+    // Update last request time
+    rateLimits[service].lastRequest = Date.now();
+};
+
+// Helper function to fetch with retry
+const fetchWithRetry = async (url, options, service, maxRetries = 3, initialDelay = 1000) => {
+    let lastError;
+    let delay = initialDelay;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            // Check rate limit before making request
+            await checkRateLimit(service);
+
+            const response = await fetch(url, options);
+
+            // If we get a 429 (Too Many Requests), wait and retry
+            if (response.status === 429) {
+                console.log(`Rate limit hit for ${service}, waiting before retry...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff
+                continue;
+            }
+
+            if (!response.ok) {
+                throw new Error(`API responded with status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            lastError = error;
+            console.error(`Attempt ${attempt + 1} failed for ${service}: ${error.message}`);
+
+            if (attempt < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff
+            }
+        }
+    }
+
+    throw lastError || new Error(`Failed after ${maxRetries} attempts`);
+};
+
 // API Endpoint: Fetch Data for Hong Kong or Bangkok
 app.get("/api/get-latest", async (req, res) => {
     try {
@@ -69,23 +144,30 @@ app.get("/api/get-latest", async (req, res) => {
             return res.status(400).json({ error: "Invalid city parameter. Use 'HongKong' or 'Bangkok'." });
         }
 
+        // Check if we have valid cached data
+        const cacheKey = `airdata_${city}`;
+        const now = Date.now();
+
+        if (cache.data[cacheKey] && (now - cache.timestamps[cacheKey] < CACHE_DURATION)) {
+            console.log(`Serving cached data for ${city}`);
+            return res.json(cache.data[cacheKey]);
+        }
+
         const { openAQLocationId, iqAir } = cityConfig[city];
 
         // Step 1: Fetch Sensor Names from OpenAQ
         const locationUrl = `https://api.openaq.org/v3/locations/${openAQLocationId}`;
-        const locationResponse = await fetch(locationUrl, {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": process.env.OPENAQ_API_KEY,
+        const locationData = await fetchWithRetry(
+            locationUrl,
+            {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-API-Key": process.env.OPENAQ_API_KEY,
+                },
             },
-        });
-
-        if (!locationResponse.ok) {
-            throw new Error(`OpenAQ API responded with status: ${locationResponse.status}`);
-        }
-
-        const locationData = await locationResponse.json();
+            'openAQ'
+        );
 
         if (!locationData.results || locationData.results.length === 0 || !locationData.results[0].sensors) {
             throw new Error("No sensor data found in OpenAQ API response.");
@@ -99,19 +181,17 @@ app.get("/api/get-latest", async (req, res) => {
 
         // Step 2: Fetch Latest Data from OpenAQ
         const latestUrl = `https://api.openaq.org/v3/locations/${openAQLocationId}/latest`;
-        const latestResponse = await fetch(latestUrl, {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                "X-API-Key": process.env.OPENAQ_API_KEY,
+        const latestData = await fetchWithRetry(
+            latestUrl,
+            {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-API-Key": process.env.OPENAQ_API_KEY,
+                },
             },
-        });
-
-        if (!latestResponse.ok) {
-            throw new Error(`OpenAQ API responded with status: ${latestResponse.status}`);
-        }
-
-        const latestData = await latestResponse.json();
+            'openAQ'
+        );
 
         if (!latestData.results || latestData.results.length === 0) {
             throw new Error("No air quality data found in OpenAQ API response.");
@@ -119,13 +199,7 @@ app.get("/api/get-latest", async (req, res) => {
 
         // Step 3: Fetch IQAir Data
         const iqAirUrl = `http://api.airvisual.com/v2/city?city=${iqAir.city}&state=${iqAir.state}&country=${iqAir.country}&key=${process.env.IQAIR_API_KEY}`;
-        const iqAirResponse = await fetch(iqAirUrl);
-
-        if (!iqAirResponse.ok) {
-            throw new Error(`IQAir API responded with status: ${iqAirResponse.status}`);
-        }
-
-        const iqAirData = await iqAirResponse.json();
+        const iqAirData = await fetchWithRetry(iqAirUrl, {}, 'iqAir');
 
         if (iqAirData.status !== 'success' || !iqAirData.data) {
             throw new Error("No air quality data found in IQAir API response.");
@@ -150,10 +224,23 @@ app.get("/api/get-latest", async (req, res) => {
             return a.name.localeCompare(b.name);
         });
 
+        // Store in cache
+        cache.data[cacheKey] = formattedData;
+        cache.timestamps[cacheKey] = now;
+
+        console.log(`Cached new data for ${city}`);
         res.json(formattedData);
 
     } catch (error) {
         console.error("Error fetching air quality data:", error);
+
+        // If we have cached data, return it even if it's expired
+        const cacheKey = `airdata_${req.query.city || "HongKong"}`;
+        if (cache.data[cacheKey]) {
+            console.log(`Serving stale cached data due to error`);
+            return res.json(cache.data[cacheKey]);
+        }
+
         res.status(500).json({ error: error.message });
     }
 });

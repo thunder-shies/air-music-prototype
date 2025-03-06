@@ -9,14 +9,14 @@ const AirMusicVisualizer = () => {
     const [hasStartedAudio, setHasStartedAudio] = useState(false);
     const instrumentsRef = useRef({});
     const synthRef = useRef(null);
-    const [aqiData, loadAQData] = useState({
-        aqi: 30,
-        pm25: 15,
-        pm10: 25,
-        so2: 20,
-        no2: 30,
-        o3: 25,
-        co: 500
+    const [aqData, loadAQData] = useState({
+        aqius: 0,
+        co: 0,
+        no2: 0,
+        o3: 0,
+        pm10: 0,
+        pm25: 0,
+        so2: 0
     });
 
     // AQI level presets
@@ -24,36 +24,28 @@ const AirMusicVisualizer = () => {
         good: {
             label: 'Good',
             values: {
-                aqi: 30,
-                pm25: 15,
-                pm10: 25
+                aqius: 30
             },
             color: 'bg-green-500'
         },
         moderate: {
             label: 'Moderate',
             values: {
-                aqi: 80,
-                pm25: 35,
-                pm10: 45
+                aqius: 80
             },
             color: 'bg-yellow-500'
         },
         unhealthy: {
             label: 'Unhealthy',
             values: {
-                aqi: 150,
-                pm25: 75,
-                pm10: 85
+                aqius: 150
             },
             color: 'bg-red-500'
         },
         hazardous: {
             label: 'Hazardous',
             values: {
-                aqi: 300,
-                pm25: 150,
-                pm10: 170
+                aqius: 300
             },
             color: 'bg-purple-500'
         }
@@ -61,22 +53,30 @@ const AirMusicVisualizer = () => {
 
     const fetchAQData = async () => {
         try {
-            const response = await fetch('https://airphonic.onrender.com/api/get-latest');
+            const response = await fetch(`https://airphonic.onrender.com/api/get-latest?city=${currentCity}`);
             const data = await response.json();
-            console.log(data[0].displayName, data[0].value);
-            // Update your state with the received data
+            console.log(`Fetching data for ${currentCity}:`, data);
+
             loadAQData({
-                aqi: data[0].value,
-                pm25: data[1].value,
-                pm10: data[2].value,
-                so2: data[3].value,
-                no2: data[4].value,
-                o3: data[5].value,
-                co: data[6].value,
+                aqius: data[0].value,
+                co: data[1].value,
+                no2: data[2].value,
+                o3: data[3].value,
+                pm10: data[4].value,
+                pm25: data[5].value,
+                so2: data[6].value,
             });
         } catch (error) {
-            console.error('Error fetching air quality data:', error);
+            console.error(`Error fetching air quality data for ${currentCity}:`, error);
         }
+    };
+
+    // Update the city change handler
+    const handleCityChange = (e) => {
+        const newCity = e.target.value;
+        setCurrentCity(newCity);
+        // Fetch new data when city changes
+        fetchAQData();
     };
 
     // Separate synth for pollutant buttons
@@ -303,7 +303,8 @@ const AirMusicVisualizer = () => {
     };
 
     useEffect(() => {
-        fetchAQData();
+        fetchAQData(); // Fetch data initially and whenever the city changes
+
         // Initialize effects
         const reverb = new Tone.Reverb({
             decay: 2,
@@ -360,25 +361,31 @@ const AirMusicVisualizer = () => {
 
         // Play music function
         const playMusic = () => {
-            if (isPlaying && hasStartedAudio && aqiData.aqi <= 50) {
+            if (isPlaying && hasStartedAudio) {
                 const music = cityMusic[currentCity];
                 const now = Tone.now();
 
+                // Adjust melody based on AQI
+                const melodyNotes = aqData.aqius <= 50 ? music.melody : music.melody.map(note => Tone.Frequency(note).transpose(-2).toNote());
+
                 // Play melody (every other step)
                 if (step % 2 === 0) {
-                    const melodyIndex = (step / 2) % music.melody.length;
+                    const melodyIndex = (step / 2) % melodyNotes.length;
                     instrumentsRef.current.melody.triggerAttackRelease(
-                        music.melody[melodyIndex],
+                        melodyNotes[melodyIndex],
                         "8n",
                         now
                     );
                 }
 
+                // Adjust harmony based on pollutant levels
+                const harmonyNotes = aqData.pm25 > 100 ? music.harmony.map(chord => chord.map(note => Tone.Frequency(note).transpose(-3).toNote())) : music.harmony;
+
                 // Play harmony (every four steps)
                 if (step % 4 === 0) {
-                    const harmonyIndex = (step / 4) % music.harmony.length;
+                    const harmonyIndex = (step / 4) % harmonyNotes.length;
                     instrumentsRef.current.harmony.triggerAttackRelease(
-                        music.harmony[harmonyIndex],
+                        harmonyNotes[harmonyIndex],
                         "2n",
                         now
                     );
@@ -418,7 +425,8 @@ const AirMusicVisualizer = () => {
                 }
             });
         };
-    }, [isPlaying, hasStartedAudio, currentCity, aqiData.aqi]);
+    }, [isPlaying, hasStartedAudio, currentCity, aqData]);
+
 
     // P5.js setup
     useEffect(() => {
@@ -443,7 +451,7 @@ const AirMusicVisualizer = () => {
 
                 display() {
                     p.noStroke();
-                    const isGoodAir = aqiData.aqi <= 50;
+                    const isGoodAir = aqData.aqius <= 50;
                     if (isGoodAir) {
                         p.fill(46, 204, 113, this.life);
                     } else {
@@ -483,7 +491,7 @@ const AirMusicVisualizer = () => {
                 p.fill(255);
                 p.noStroke();
                 p.textSize(16);
-                p.text(`AQI: ${aqiData.aqi}`, 20, 30);
+                p.text(`AQI: ${aqData.aqius}`, 20, 30);
                 p.text(`Current City: ${currentCity}`, 20, 60);
                 p.text(`Playing: ${isPlaying ? 'Yes' : 'No'}`, 20, 90);
             };
@@ -617,8 +625,6 @@ const AirMusicVisualizer = () => {
                 >
                     <option value="HongKong">Hong Kong</option>
                     <option value="Bangkok">Bangkok</option>
-                    <option value="Beijing">Beijing</option>
-                    <option value="Melbourne">Melbourne</option>
                 </select>
             </div>
 
@@ -630,10 +636,10 @@ const AirMusicVisualizer = () => {
                         key={key}
                         onClick={() => handleAqiLevelChange(key)}
                         className={`px-4 py-2 rounded-lg ${level.color} text-white 
-                            ${aqiData.aqi === level.values.aqi ? 'ring-2 ring-white' : ''}
+                            ${aqData.aqius === level.values.aqius ? 'ring-2 ring-white' : ''}
                             hover:opacity-80 transition-opacity`}
                     >
-                        {level.label} (AQI: {level.values.aqi})
+                        {level.label} (AQI: {level.values.aqius})
                     </button>
                 ))}
             </div>
@@ -650,7 +656,7 @@ const AirMusicVisualizer = () => {
                                     key={level}
                                     onClick={() => handlePollutantChange(pollutant, level)}
                                     className={`px-3 py-1 rounded-lg ${levelData.color} text-white text-sm
-                                        ${aqiData[pollutant] === levelData.value ? 'ring-2 ring-white' : ''}
+                                        ${aqData[pollutant] === levelData.value ? 'ring-2 ring-white' : ''}
                                         hover:opacity-80 transition-opacity`}
                                 >
                                     {levelData.label} ({levelData.value} {data.unit})
@@ -664,14 +670,12 @@ const AirMusicVisualizer = () => {
             {/* Current AQI Display */}
             <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-50 p-4 rounded-lg text-white">
                 <h3 className="font-bold mb-2">Current Air Quality</h3>
-                <p>AQI: {aqiData.aqi}</p>
-                <p>PM2.5: {aqiData.pm25}</p>
-                <p>PM10: {aqiData.pm10}</p>
+                <p>AQI: {aqData.aqius}</p>
                 <p className="mt-2">
                     Status: {
-                        aqiData.aqi <= 50 ? 'Good (Playing Melody)' :
-                            aqiData.aqi <= 100 ? 'Moderate' :
-                                aqiData.aqi <= 200 ? 'Unhealthy' :
+                        aqData.aqius <= 50 ? 'Good (Playing Melody)' :
+                            aqData.aqius <= 100 ? 'Moderate' :
+                                aqData.aqius <= 200 ? 'Unhealthy' :
                                     'Hazardous'
                     }
                 </p>
@@ -682,21 +686,11 @@ const AirMusicVisualizer = () => {
                 <h3 className="font-bold mb-2">Current Pollutant Levels</h3>
                 {Object.entries(pollutantLevels).map(([pollutant, data]) => (
                     <p key={pollutant}>
-                        {data.name}: {aqiData[pollutant]} {data.unit}
+                        {data.name}: {aqData[pollutant]} {data.unit}
                     </p>
                 ))}
             </div>
 
-            <div>
-                <h2>Air Quality Data</h2>
-                <p>AQI: {aqiData.aqi}</p>
-                <p>PM2.5: {aqiData.pm25}</p>
-                <p>PM10: {aqiData.pm10}</p>
-                <p>SO2: {aqiData.so2}</p>
-                <p>NO2: {aqiData.no2}</p>
-                <p>O3: {aqiData.o3}</p>
-                <p>CO: {aqiData.co}</p>
-            </div>
         </div>
     );
 };
