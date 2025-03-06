@@ -9,7 +9,7 @@ const AirMusicVisualizer = () => {
     const [hasStartedAudio, setHasStartedAudio] = useState(false);
     const instrumentsRef = useRef({});
     const synthRef = useRef(null);
-    const [aqiData, setAqiData] = useState({
+    const [aqiData, loadAQData] = useState({
         aqi: 30,
         pm25: 15,
         pm10: 25,
@@ -56,6 +56,26 @@ const AirMusicVisualizer = () => {
                 pm10: 170
             },
             color: 'bg-purple-500'
+        }
+    };
+
+    const fetchAQData = async () => {
+        try {
+            const response = await fetch('https://airphonic.onrender.com/api/get-latest');
+            const data = await response.json();
+            console.log(data[0].displayName, data[0].value);
+            // Update your state with the received data
+            loadAQData({
+                aqi: data[0].value,
+                pm25: data[1].value,
+                pm10: data[2].value,
+                so2: data[3].value,
+                no2: data[4].value,
+                o3: data[5].value,
+                co: data[6].value,
+            });
+        } catch (error) {
+            console.error('Error fetching air quality data:', error);
         }
     };
 
@@ -283,6 +303,7 @@ const AirMusicVisualizer = () => {
     };
 
     useEffect(() => {
+        fetchAQData();
         // Initialize effects
         const reverb = new Tone.Reverb({
             decay: 2,
@@ -487,7 +508,7 @@ const AirMusicVisualizer = () => {
     };
 
     const handleAqiLevelChange = (level) => {
-        setAqiData(aqiLevels[level].values);
+        loadAQData(aqiLevels[level].values);
     };
 
     const handlePollutantChange = async (pollutant, level) => {
@@ -499,7 +520,7 @@ const AirMusicVisualizer = () => {
             }
 
             // Update state
-            setAqiData(prev => ({
+            loadAQData(prev => ({
                 ...prev,
                 [pollutant]: pollutantLevels[pollutant].levels[level].value
             }));
@@ -507,7 +528,7 @@ const AirMusicVisualizer = () => {
             // Play sound for the button
             if (buttonSynthRef.current && pollutantSounds[pollutant]) {
                 const sound = pollutantSounds[pollutant][level];
-                
+
                 // Play each note of the chord with slight delay
                 sound.notes.forEach((note, i) => {
                     buttonSynthRef.current.triggerAttackRelease(
@@ -579,14 +600,13 @@ const AirMusicVisualizer = () => {
     return (
         <div className="relative w-full h-screen bg-black">
             <div ref={canvasRef} className="absolute inset-0" />
-            
+
             {/* Main controls */}
             <div className="absolute top-4 right-4 z-10 flex gap-2">
                 <button
                     onClick={handleStart}
-                    className={`px-4 py-2 rounded-lg ${
-                        isPlaying ? 'bg-red-500' : 'bg-green-500'
-                    } text-white`}
+                    className={`px-4 py-2 rounded-lg ${isPlaying ? 'bg-red-500' : 'bg-green-500'
+                        } text-white`}
                 >
                     {isPlaying ? 'Stop' : 'Start'}
                 </button>
@@ -650,9 +670,9 @@ const AirMusicVisualizer = () => {
                 <p className="mt-2">
                     Status: {
                         aqiData.aqi <= 50 ? 'Good (Playing Melody)' :
-                        aqiData.aqi <= 100 ? 'Moderate' :
-                        aqiData.aqi <= 200 ? 'Unhealthy' :
-                        'Hazardous'
+                            aqiData.aqi <= 100 ? 'Moderate' :
+                                aqiData.aqi <= 200 ? 'Unhealthy' :
+                                    'Hazardous'
                     }
                 </p>
             </div>
@@ -665,6 +685,17 @@ const AirMusicVisualizer = () => {
                         {data.name}: {aqiData[pollutant]} {data.unit}
                     </p>
                 ))}
+            </div>
+
+            <div>
+                <h2>Air Quality Data</h2>
+                <p>AQI: {aqiData.aqi}</p>
+                <p>PM2.5: {aqiData.pm25}</p>
+                <p>PM10: {aqiData.pm10}</p>
+                <p>SO2: {aqiData.so2}</p>
+                <p>NO2: {aqiData.no2}</p>
+                <p>O3: {aqiData.o3}</p>
+                <p>CO: {aqiData.co}</p>
             </div>
         </div>
     );
