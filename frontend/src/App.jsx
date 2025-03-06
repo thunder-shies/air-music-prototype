@@ -1,8 +1,8 @@
-import AirMusicVisualizer from './components/AirMusicVisualizer'
+import Airphonic from './components/Airphonic'
 
 function App() {
   return (
-    <AirMusicVisualizer />
+    <Airphonic />
   )
 }
 

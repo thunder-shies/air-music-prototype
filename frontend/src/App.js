@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 
-const AirMusicVisualizer = () => {
+const Airphonic = () => {
     const [particles, setParticles] = useState([]);
     const [location, setLocation] = useState('BKK'); // Toggle between BKK and HK
 
@@ -117,4 +117,4 @@ const AirMusicVisualizer = () => {
     );
 };
 
-export default AirMusicVisualizer;
+export default Airphonic;

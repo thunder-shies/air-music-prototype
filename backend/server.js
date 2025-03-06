@@ -38,7 +38,7 @@ const cache = {
 };
 
 // Cache configuration
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes in milliseconds
+const CACHE_DURATION = 15 * 60 * 1000; // 10 minutes in milliseconds
 
 // Rate limiting configuration
 const rateLimits = {
@@ -149,7 +149,7 @@ app.get("/api/get-latest", async (req, res) => {
         const now = Date.now();
 
         if (cache.data[cacheKey] && (now - cache.timestamps[cacheKey] < CACHE_DURATION)) {
-            console.log(`Serving cached data for ${city}`);
+            // console.log(`Serving cached data for ${city}`);
             return res.json(cache.data[cacheKey]);
         }
 

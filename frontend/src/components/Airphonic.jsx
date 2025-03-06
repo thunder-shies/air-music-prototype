@@ -2,82 +2,23 @@ import React, { useEffect, useRef, useState } from 'react';
 import p5 from 'p5';
 import * as Tone from 'tone';
 
-const AirMusicVisualizer = () => {
+const Airphonic = () => {
     const canvasRef = useRef(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentCity, setCurrentCity] = useState('HongKong');
     const [hasStartedAudio, setHasStartedAudio] = useState(false);
     const instrumentsRef = useRef({});
     const synthRef = useRef(null);
-    const [aqData, loadAQData] = useState({
+    const [aqData, setAqiData] = useState({
         aqius: 0,
-        co: 0,
+        pm25: 0,
+        pm10: 0,
+        so2: 0,
         no2: 0,
         o3: 0,
-        pm10: 0,
-        pm25: 0,
-        so2: 0
+        co: 0
     });
 
-    // AQI level presets
-    const aqiLevels = {
-        good: {
-            label: 'Good',
-            values: {
-                aqius: 30
-            },
-            color: 'bg-green-500'
-        },
-        moderate: {
-            label: 'Moderate',
-            values: {
-                aqius: 80
-            },
-            color: 'bg-yellow-500'
-        },
-        unhealthy: {
-            label: 'Unhealthy',
-            values: {
-                aqius: 150
-            },
-            color: 'bg-red-500'
-        },
-        hazardous: {
-            label: 'Hazardous',
-            values: {
-                aqius: 300
-            },
-            color: 'bg-purple-500'
-        }
-    };
-
-    const fetchAQData = async () => {
-        try {
-            const response = await fetch(`https://airphonic.onrender.com/api/get-latest?city=${currentCity}`);
-            const data = await response.json();
-            console.log(`Fetching data for ${currentCity}:`, data);
-
-            loadAQData({
-                aqius: data[0].value,
-                co: data[1].value,
-                no2: data[2].value,
-                o3: data[3].value,
-                pm10: data[4].value,
-                pm25: data[5].value,
-                so2: data[6].value,
-            });
-        } catch (error) {
-            console.error(`Error fetching air quality data for ${currentCity}:`, error);
-        }
-    };
-
-    // Update the city change handler
-    const handleCityChange = (e) => {
-        const newCity = e.target.value;
-        setCurrentCity(newCity);
-        // Fetch new data when city changes
-        fetchAQData();
-    };
 
     // Separate synth for pollutant buttons
     const buttonSynthRef = useRef(null);
@@ -303,8 +244,6 @@ const AirMusicVisualizer = () => {
     };
 
     useEffect(() => {
-        fetchAQData(); // Fetch data initially and whenever the city changes
-
         // Initialize effects
         const reverb = new Tone.Reverb({
             decay: 2,
@@ -361,31 +300,26 @@ const AirMusicVisualizer = () => {
 
         // Play music function
         const playMusic = () => {
+            // Remove the aqData.aqius check
             if (isPlaying && hasStartedAudio) {
                 const music = cityMusic[currentCity];
                 const now = Tone.now();
 
-                // Adjust melody based on AQI
-                const melodyNotes = aqData.aqius <= 50 ? music.melody : music.melody.map(note => Tone.Frequency(note).transpose(-2).toNote());
-
                 // Play melody (every other step)
                 if (step % 2 === 0) {
-                    const melodyIndex = (step / 2) % melodyNotes.length;
+                    const melodyIndex = (step / 2) % music.melody.length;
                     instrumentsRef.current.melody.triggerAttackRelease(
-                        melodyNotes[melodyIndex],
+                        music.melody[melodyIndex],
                         "8n",
                         now
                     );
                 }
 
-                // Adjust harmony based on pollutant levels
-                const harmonyNotes = aqData.pm25 > 100 ? music.harmony.map(chord => chord.map(note => Tone.Frequency(note).transpose(-3).toNote())) : music.harmony;
-
                 // Play harmony (every four steps)
                 if (step % 4 === 0) {
-                    const harmonyIndex = (step / 4) % harmonyNotes.length;
+                    const harmonyIndex = (step / 4) % music.harmony.length;
                     instrumentsRef.current.harmony.triggerAttackRelease(
-                        harmonyNotes[harmonyIndex],
+                        music.harmony[harmonyIndex],
                         "2n",
                         now
                     );
@@ -425,8 +359,7 @@ const AirMusicVisualizer = () => {
                 }
             });
         };
-    }, [isPlaying, hasStartedAudio, currentCity, aqData]);
-
+    }, [isPlaying, hasStartedAudio, currentCity]);
 
     // P5.js setup
     useEffect(() => {
@@ -451,11 +384,18 @@ const AirMusicVisualizer = () => {
 
                 display() {
                     p.noStroke();
-                    const isGoodAir = aqData.aqius <= 50;
-                    if (isGoodAir) {
-                        p.fill(46, 204, 113, this.life);
+                    if (aqData.aqius <= 50) {
+                        p.fill(156, 216, 78, this.life);
+                    } else if (aqData.aqius <= 100) {
+                        p.fill(250, 207, 57, this.life);
+                    } else if (aqData.aqius <= 150) {
+                        p.fill(243, 114, 73, this.life);
+                    } else if (aqData.aqius <= 200) {
+                        p.fill(246, 94, 95, this.life);
+                    } else if (aqData.aqius <= 300) {
+                        p.fill(160, 112, 182, this.life);
                     } else {
-                        p.fill(231, 76, 60, this.life);
+                        p.fill(246, 94, 95, this.life);
                     }
                     p.circle(this.x, this.y, this.size);
                 }
@@ -490,10 +430,22 @@ const AirMusicVisualizer = () => {
 
                 p.fill(255);
                 p.noStroke();
-                p.textSize(16);
-                p.text(`AQI: ${aqData.aqius}`, 20, 30);
-                p.text(`Current City: ${currentCity}`, 20, 60);
-                p.text(`Playing: ${isPlaying ? 'Yes' : 'No'}`, 20, 90);
+                p.textSize(20);
+                p.textFont('Arial');
+
+                // Display basic information
+                p.text(`Current City: ${currentCity}`, 20, 30);
+                p.text(`AQI (US): ${aqData.aqius}`, 20, 60);
+                p.text(`Playing: ${isPlaying ? 'Yes' : 'No'}`, 90);
+
+                // Display current pollutant levels
+                let yPosition = window.innerHeight - 50; // Starting y position for pollutants
+                yPosition += 30; // Space between lines
+
+                Object.entries(pollutantLevels).forEach(([pollutant, data]) => {
+                    p.text(`${data.name}: ${aqData[pollutant]} ${data.unit}`, 20, yPosition);
+                    yPosition -= 30; // Space between lines
+                });
             };
 
             p.windowResized = () => {
@@ -515,20 +467,34 @@ const AirMusicVisualizer = () => {
         }
     };
 
-    const handleAqiLevelChange = (level) => {
-        loadAQData(aqiLevels[level].values);
-    };
-
     const handlePollutantChange = async (pollutant, level) => {
         try {
-            // Ensure audio context is started
-            if (!hasStartedAudio) {
-                await Tone.start();
-                setHasStartedAudio(true);
+            await Tone.start();
+            if (Tone.context.state !== 'running') {
+                await Tone.context.resume();
             }
 
-            // Update state
-            loadAQData(prev => ({
+            // Reinitialize button synth if it was disposed
+            if (!buttonSynthRef.current) {
+                const reverb = new Tone.Reverb({
+                    decay: 2,
+                    wet: 0.3
+                }).toDestination();
+
+                buttonSynthRef.current = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: 'triangle' },
+                    envelope: {
+                        attack: 0.1,
+                        decay: 0.2,
+                        sustain: 0.3,
+                        release: 1
+                    },
+                    volume: -8
+                }).connect(reverb);
+            }
+
+            // Update pollutant value in aqData state
+            setAqiData(prev => ({
                 ...prev,
                 [pollutant]: pollutantLevels[pollutant].levels[level].value
             }));
@@ -536,8 +502,6 @@ const AirMusicVisualizer = () => {
             // Play sound for the button
             if (buttonSynthRef.current && pollutantSounds[pollutant]) {
                 const sound = pollutantSounds[pollutant][level];
-
-                // Play each note of the chord with slight delay
                 sound.notes.forEach((note, i) => {
                     buttonSynthRef.current.triggerAttackRelease(
                         note,
@@ -547,7 +511,6 @@ const AirMusicVisualizer = () => {
                     );
                 });
 
-                // Log for debugging
                 console.log(`Playing ${pollutant} ${level} sound:`, sound.notes);
             }
         } catch (error) {
@@ -580,41 +543,77 @@ const AirMusicVisualizer = () => {
 
     // Initialize button synth
     useEffect(() => {
-        if (!buttonSynthRef.current) {
-            const reverb = new Tone.Reverb({
-                decay: 2,
-                wet: 0.3
-            }).toDestination();
+        const initButtonSynth = () => {
+            if (!buttonSynthRef.current) {
+                const reverb = new Tone.Reverb({
+                    decay: 2,
+                    wet: 0.3
+                }).toDestination();
 
-            buttonSynthRef.current = new Tone.PolySynth(Tone.Synth, {
-                oscillator: { type: 'triangle' },
-                envelope: {
-                    attack: 0.1,
-                    decay: 0.2,
-                    sustain: 0.3,
-                    release: 1
-                },
-                volume: -8
-            }).connect(reverb);
-        }
+                buttonSynthRef.current = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: 'triangle' },
+                    envelope: {
+                        attack: 0.1,
+                        decay: 0.2,
+                        sustain: 0.3,
+                        release: 1
+                    },
+                    volume: -8
+                }).connect(reverb);
+            }
+        };
+
+        initButtonSynth();
 
         return () => {
             if (buttonSynthRef.current) {
                 buttonSynthRef.current.dispose();
+                buttonSynthRef.current = null; // Reset the ref after disposal
             }
         };
     }, []);
+
+    // 1. New useEffect: Fetch data from server.js periodically
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await fetch(`https://airphonic.onrender.com/api/get-latest?city=${currentCity}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const result = await response.json();
+                // Map the returned array into your state object structure
+                const formattedData = {
+                    aqius: result.find(item => item.name === "aqius")?.value || aqData.aqius,
+                    pm25: result.find(item => item.name === "pm25")?.value || aqData.pm25,
+                    pm10: result.find(item => item.name === "pm10")?.value || aqData.pm10,
+                    so2: result.find(item => item.name === "so2")?.value || aqData.so2,
+                    no2: result.find(item => item.name === "no2")?.value || aqData.no2,
+                    o3: result.find(item => item.name === "o3")?.value || aqData.o3,
+                    co: result.find(item => item.name === "co")?.value || aqData.co,
+                };
+                setAqiData(formattedData);
+            } catch (error) {
+                console.error('Error fetching air quality data:', error);
+            }
+        };
+
+        // initial fetch on mount and whenever currentCity changes
+        fetchData();
+        // refresh data every 60 seconds
+        const interval = setInterval(fetchData, 60000);
+        return () => clearInterval(interval);
+    }, [currentCity]);
 
     return (
         <div className="relative w-full h-screen bg-black">
             <div ref={canvasRef} className="absolute inset-0" />
 
             {/* Main controls */}
-            <div className="absolute top-4 right-4 z-10 flex gap-2">
+            <div className="px-4 py-2 rounded-lg bg-gray-700 text-white">
                 <button
                     onClick={handleStart}
-                    className={`px-4 py-2 rounded-lg ${isPlaying ? 'bg-red-500' : 'bg-green-500'
-                        } text-white`}
+                    className={`px-4 py-2 rounded-lg ${isPlaying ? 'bg-red-500' : 'bg-green-500'} text-white`}
                 >
                     {isPlaying ? 'Stop' : 'Start'}
                 </button>
@@ -623,25 +622,12 @@ const AirMusicVisualizer = () => {
                     onChange={(e) => setCurrentCity(e.target.value)}
                     className="px-4 py-2 rounded-lg bg-gray-700 text-white"
                 >
-                    <option value="HongKong">Hong Kong</option>
-                    <option value="Bangkok">Bangkok</option>
+                    {Object.keys(cityMusic).map(city => (
+                        <option key={city} value={city} className="bg-gray-700 text-white">
+                            {city}
+                        </option>
+                    ))}
                 </select>
-            </div>
-
-            {/* AQI Level Controls */}
-            <div className="absolute top-20 right-4 z-10 flex flex-col gap-2 bg-black bg-opacity-50 p-4 rounded-lg">
-                <h3 className="text-white font-bold mb-2">Air Quality Levels</h3>
-                {Object.entries(aqiLevels).map(([key, level]) => (
-                    <button
-                        key={key}
-                        onClick={() => handleAqiLevelChange(key)}
-                        className={`px-4 py-2 rounded-lg ${level.color} text-white 
-                            ${aqData.aqius === level.values.aqius ? 'ring-2 ring-white' : ''}
-                            hover:opacity-80 transition-opacity`}
-                    >
-                        {level.label} (AQI: {level.values.aqius})
-                    </button>
-                ))}
             </div>
 
             {/* Pollutant Controls with sound feedback */}
@@ -666,33 +652,8 @@ const AirMusicVisualizer = () => {
                     </div>
                 ))}
             </div>
-
-            {/* Current AQI Display */}
-            <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-50 p-4 rounded-lg text-white">
-                <h3 className="font-bold mb-2">Current Air Quality</h3>
-                <p>AQI: {aqData.aqius}</p>
-                <p className="mt-2">
-                    Status: {
-                        aqData.aqius <= 50 ? 'Good (Playing Melody)' :
-                            aqData.aqius <= 100 ? 'Moderate' :
-                                aqData.aqius <= 200 ? 'Unhealthy' :
-                                    'Hazardous'
-                    }
-                </p>
-            </div>
-
-            {/* Current Levels Display */}
-            <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-50 p-4 rounded-lg text-white">
-                <h3 className="font-bold mb-2">Current Pollutant Levels</h3>
-                {Object.entries(pollutantLevels).map(([pollutant, data]) => (
-                    <p key={pollutant}>
-                        {data.name}: {aqData[pollutant]} {data.unit}
-                    </p>
-                ))}
-            </div>
-
         </div>
     );
 };
 
-export default AirMusicVisualizer;
+export default Airphonic;
