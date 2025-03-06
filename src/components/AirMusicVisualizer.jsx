@@ -3,181 +3,323 @@ import p5 from 'p5';
 import * as Tone from 'tone';
 
 const AirMusicVisualizer = () => {
-    const canvasRef = useRef(null); // Reference to the p5.js canvas
-    const [currentCity, setCurrentCity] = useState('HongKong'); // State to track the selected city
-    const API_KEY = 'e4e64ea0-fde3-47a3-8766-7ee75e798d6d'; // API key for fetching AQI data
-    const sketchRef = useRef(null); // Reference to the p5.js sketch instance
-    const synthRef = useRef(null); // Reference to the Tone.js synth
+    const canvasRef = useRef(null);
+    const [currentCity, setCurrentCity] = useState('HongKong');
+    const API_KEY = 'e4e64ea0-fde3-47a3-8766-7ee75e798d6d';
+    const sketchRef = useRef(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    
+    // Initialize synth refs for each city
+    const synths = useRef({
+        HongKong: new Tone.PolySynth(Tone.AMSynth).toDestination(),
+        Bangkok: new Tone.PolySynth(Tone.FMSynth).toDestination(),
+        Beijing: new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: 'sine' },
+            envelope: {
+                attack: 0.1,
+                decay: 0.2,
+                sustain: 0.3,
+                release: 1
+            }
+        }).toDestination(),
+        Melbourne: new Tone.PolySynth(Tone.Synth).toDestination()
+    });
+
+    const cityMelodies = {
+        HongKong: [
+            ['E4', 'G4', 'A4', 'C5'],
+            ['A4', 'C5', 'D5', 'E5'],
+            ['G4', 'A4', 'C5', 'D5']
+        ],
+        Bangkok: [
+            ['D4', 'F4', 'A4', 'C5'],
+            ['C4', 'E4', 'G4', 'B4'],
+            ['E4', 'G4', 'B4', 'D5']
+        ],
+        Beijing: [
+            ['G3', 'A3', 'C4', 'D4'],
+            ['E3', 'G3', 'A3', 'C4'],
+            ['D3', 'F3', 'G3', 'A3']
+        ],
+        Melbourne: [
+            ['F4', 'A4', 'C5', 'E5'],
+            ['G4', 'B4', 'D5', 'F5'],
+            ['A4', 'C5', 'E5', 'G5']
+        ]
+    };
+
+    // Define AQI level thresholds and characteristics
+    const aqiLevels = {
+        good: { max: 50, color: [46, 204, 113] },
+        moderate: { max: 100, color: [241, 196, 15] },
+        unhealthySensitive: { max: 150, color: [230, 126, 34] },
+        unhealthy: { max: 200, color: [231, 76, 60] },
+        veryUnhealthy: { max: 300, color: [142, 68, 173] },
+        hazardous: { max: 500, color: [155, 89, 182] }
+    };
+
+    const getAQILevel = (aqi) => {
+        if (aqi <= aqiLevels.good.max) return 'good';
+        if (aqi <= aqiLevels.moderate.max) return 'moderate';
+        if (aqi <= aqiLevels.unhealthySensitive.max) return 'unhealthySensitive';
+        if (aqi <= aqiLevels.unhealthy.max) return 'unhealthy';
+        if (aqi <= aqiLevels.veryUnhealthy.max) return 'veryUnhealthy';
+        return 'hazardous';
+    };
 
     useEffect(() => {
-        // Initialize Tone.js synth
-        synthRef.current = new Tone.PolySynth(Tone.Synth).toDestination();
+        let particles = [];
+        let currentMelodyIndex = 0;
+        let currentNoteIndex = 0;
+        let lastNoteTime = 0;
+        let noteInterval = 500;
+        let aqius = 50;
 
-        // Create a new p5.js sketch
-        let sketch = new p5((p) => {
-            let particles = []; // Array to store particle objects
-            let noiseOffsetX = 0; // Noise offset for X-axis
-            let noiseOffsetY = 0; // Noise offset for Y-axis
-            let mx = 0; // Mouse X position
-            let my = 0; // Mouse Y position
-            let aqius = 0; // AQI value
-
-            // Function to map Y position to musical notes
-            const getNote = (y) => {
-                const notes = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5']; // Pentatonic scale notes
-                const index = Math.floor(p.map(y, 0, window.innerHeight, 0, notes.length));
-                return notes[index];
-            };
-
-            // Function to play sound based on mouse position
-            const playSound = (x, y) => {
-                if (Tone.context.state !== 'running') {
-                    Tone.start();
+        const sketch = new p5((p) => {
+            class Particle {
+                constructor(x, y, aqiLevel) {
+                    this.pos = p.createVector(x, y);
+                    this.vel = p.createVector(p.random(-1, 1), p.random(-1, 1));
+                    this.acc = p.createVector(0, 0);
+                    this.lifespan = 255;
+                    this.aqiLevel = aqiLevel;
+                    this.color = aqiLevels[aqiLevel].color;
+                    
+                    // Adjust particle size and behavior based on AQI level
+                    switch(aqiLevel) {
+                        case 'good':
+                            this.size = 5;
+                            this.speedMultiplier = 0.5;
+                            break;
+                        case 'moderate':
+                            this.size = 8;
+                            this.speedMultiplier = 0.8;
+                            break;
+                        case 'unhealthySensitive':
+                            this.size = 12;
+                            this.speedMultiplier = 1.2;
+                            break;
+                        case 'unhealthy':
+                            this.size = 15;
+                            this.speedMultiplier = 1.5;
+                            break;
+                        case 'veryUnhealthy':
+                            this.size = 18;
+                            this.speedMultiplier = 2;
+                            break;
+                        case 'hazardous':
+                            this.size = 20;
+                            this.speedMultiplier = 2.5;
+                            break;
+                    }
                 }
 
-                const note = getNote(y);
-                const volume = p.map(x, 0, window.innerWidth, -20, 0);
-
-                // Modify synth parameters based on AQI
-                if (aqius <= 50) {
-                    synthRef.current.set({
-                        oscillator: { type: 'sine' },
-                        envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 1 }
-                    });
-                } else if (aqius <= 150) {
-                    synthRef.current.set({
-                        oscillator: { type: 'triangle' },
-                        envelope: { attack: 0.05, decay: 0.3, sustain: 0.4, release: 0.8 }
-                    });
-                } else {
-                    synthRef.current.set({
-                        oscillator: { type: 'sawtooth' },
-                        envelope: { attack: 0.02, decay: 0.4, sustain: 0.3, release: 0.5 }
-                    });
+                update() {
+                    // Add turbulence based on AQI level
+                    const turbulence = p.createVector(
+                        p.noise(this.pos.x * 0.01, this.pos.y * 0.01) - 0.5,
+                        p.noise(this.pos.x * 0.01, this.pos.y * 0.01 + 1000) - 0.5
+                    );
+                    turbulence.mult(this.speedMultiplier);
+                    this.acc.add(turbulence);
+                    
+                    this.vel.add(this.acc);
+                    this.vel.limit(3 * this.speedMultiplier);
+                    this.pos.add(this.vel);
+                    this.acc.mult(0);
+                    
+                    // Adjust lifespan decay based on AQI level
+                    this.lifespan -= 1 + this.speedMultiplier;
                 }
 
-                synthRef.current.triggerAttackRelease(note, '8n', undefined, volume);
+                display() {
+                    p.noStroke();
+                    const alpha = this.lifespan;
+                    p.fill(...this.color, alpha);
+                    p.circle(this.pos.x, this.pos.y, this.size);
+                }
+
+                isDead() {
+                    return this.lifespan < 0;
+                }
+            }
+
+            const adjustSynthParameters = (aqiLevel) => {
+                const synth = synths.current[currentCity];
+                
+                switch(aqiLevel) {
+                    case 'good':
+                        synth.set({
+                            envelope: {
+                                attack: 0.1,
+                                decay: 0.2,
+                                sustain: 0.3,
+                                release: 0.8
+                            },
+                            volume: -12
+                        });
+                        noteInterval = 600; // Slower, calmer tempo
+                        break;
+                        
+                    case 'moderate':
+                        synth.set({
+                            envelope: {
+                                attack: 0.08,
+                                decay: 0.3,
+                                sustain: 0.4,
+                                release: 0.7
+                            },
+                            volume: -10
+                        });
+                        noteInterval = 500;
+                        break;
+                        
+                    case 'unhealthySensitive':
+                        synth.set({
+                            envelope: {
+                                attack: 0.05,
+                                decay: 0.4,
+                                sustain: 0.5,
+                                release: 0.6
+                            },
+                            volume: -8
+                        });
+                        noteInterval = 450;
+                        break;
+                        
+                    case 'unhealthy':
+                        synth.set({
+                            envelope: {
+                                attack: 0.03,
+                                decay: 0.5,
+                                sustain: 0.6,
+                                release: 0.5
+                            },
+                            volume: -6
+                        });
+                        noteInterval = 400;
+                        break;
+                        
+                    case 'veryUnhealthy':
+                        synth.set({
+                            envelope: {
+                                attack: 0.02,
+                                decay: 0.6,
+                                sustain: 0.7,
+                                release: 0.4
+                            },
+                            volume: -4
+                        });
+                        noteInterval = 350;
+                        break;
+                        
+                    case 'hazardous':
+                        synth.set({
+                            envelope: {
+                                attack: 0.01,
+                                decay: 0.7,
+                                sustain: 0.8,
+                                release: 0.3
+                            },
+                            volume: -2
+                        });
+                        noteInterval = 300; // Faster, more intense tempo
+                        break;
+                }
             };
 
             p.setup = () => {
-                p.createCanvas(window.innerWidth, window.innerHeight); // Create a full-screen canvas
-                loadAQIData(); // Load AQI data for the current city
+                const canvas = p.createCanvas(window.innerWidth, window.innerHeight);
+                canvas.parent(canvasRef.current);
+                p.background(0);
             };
 
-            p.mousePressed = () => {
-                playSound(p.mouseX, p.mouseY); // Play sound on mouse press
+            const playNote = () => {
+                if (isPlaying) {
+                    const aqiLevel = getAQILevel(aqius);
+                    adjustSynthParameters(aqiLevel);
+                    
+                    const melodies = cityMelodies[currentCity];
+                    const currentMelody = melodies[currentMelodyIndex];
+                    const note = currentMelody[currentNoteIndex];
+                    
+                    synths.current[currentCity].triggerAttackRelease(note, '8n');
+                    
+                    // Create multiple particles based on AQI level
+                    const particleCount = Math.ceil(aqius / 50); // More particles for worse AQI
+                    for (let i = 0; i < particleCount; i++) {
+                        const x = p.random(p.width);
+                        const y = p.random(p.height);
+                        particles.push(new Particle(x, y, aqiLevel));
+                    }
+                    
+                    currentNoteIndex = (currentNoteIndex + 1) % currentMelody.length;
+                    if (currentNoteIndex === 0) {
+                        currentMelodyIndex = (currentMelodyIndex + 1) % melodies.length;
+                    }
+                }
             };
 
             p.draw = () => {
-                p.background(0); // Clear the canvas with a black background
+                p.background(0, 25);
 
-                if (p.mouseIsPressed) {
-                    mx = p.lerp(mx, p.mouseX, 0.09); // Smoothly interpolate mouse X position
-                    my = p.lerp(my, p.mouseY, 0.09); // Smoothly interpolate mouse Y position
-                    let particle = new Particle(mx, my); // Create a new particle at the interpolated position
-                    particles.push(particle); // Add the particle to the array
+                // Check if it's time to play the next note
+                if (isPlaying && p.millis() - lastNoteTime > noteInterval) {
+                    playNote();
+                    lastNoteTime = p.millis();
                 }
 
                 // Update and display particles
                 for (let i = particles.length - 1; i >= 0; i--) {
                     particles[i].update();
-                    particles[i].show();
-                    if (particles[i].onDestroy()) {
-                        particles.splice(i, 1); // Remove particles that are no longer visible
+                    particles[i].display();
+                    if (particles[i].isDead()) {
+                        particles.splice(i, 1);
                     }
                 }
             };
 
-            // Particle class to represent visual elements
-            class Particle {
-                constructor(x, y) {
-                    this.x = x;
-                    this.y = y;
-                    this.vx = p.random(-5, 5); // Random horizontal velocity
-                    this.vy = p.random(-6, -1); // Random vertical velocity
-                    this.size = p.random(window.innerWidth / 25, window.innerWidth / 12); // Random size
-                    this.alpha = 255; // Initial transparency
-                    this.color = this.getColorByAQI(aqius); // Color based on AQI
-                }
+            // Window resize handler
+            p.windowResized = () => {
+                p.resizeCanvas(window.innerWidth, window.innerHeight);
+            };
 
-                // Determine color based on AQI value
-                getColorByAQI(aqi) {
-                    if (aqi <= 50) {
-                        return p.color(156, 216, 78);
-                    } else if (aqi <= 100) {
-                        return p.color(250, 207, 57);
-                    } else if (aqi <= 150) {
-                        return p.color(243, 114, 73);
-                    } else if (aqi <= 200) {
-                        return p.color(246, 94, 95);
-                    } else if (aqi <= 300) {
-                        return p.color(160, 112, 182);
-                    } else {
-                        return p.color(160, 106, 123);
-                    }
-                }
-
-                // Display the particle
-                show() {
-                    p.noStroke();
-                    p.fill(this.color.levels[0], this.color.levels[1], this.color.levels[2], this.alpha);
-                    p.ellipse(this.x, this.y, this.size);
-                }
-
-                // Update particle position and transparency
-                update() {
-                    this.x += this.vx;
-                    this.y += this.vy;
-                    this.size -= 0.2;
-                    this.alpha -= 5;
-                }
-
-                // Check if the particle should be destroyed
-                onDestroy() {
-                    return this.alpha < 0 || this.size < 0;
-                }
-            }
-
-            // Function to load AQI data for the current city
-            async function loadAQIData() {
-                const locations = {
-                    'Bangkok': `https://api.airvisual.com/v2/city?city=Bangkok&state=Bangkok&country=Thailand&key=${API_KEY}`,
-                    'HongKong': `https://api.airvisual.com/v2/city?city=Hong Kong&state=Hong Kong&country=Hong Kong&key=${API_KEY}`,
-                    'Beijing': `https://api.airvisual.com/v2/city?city=Beijing&state=Beijing&country=China&key=${API_KEY}`,
-                    'Melbourne': `https://api.airvisual.com/v2/city?city=Melbourne&state=Victoria&country=Australia&key=${API_KEY}`,
-                };
-
+            const updateAQI = async () => {
                 try {
-                    const response = await fetch(locations[currentCity]);
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch AQI data');
-                    }
+                    const response = await fetch(
+                        `https://api.airvisual.com/v2/city?city=${currentCity}&state=&country=&key=${API_KEY}`
+                    );
                     const data = await response.json();
-                    aqius = data.data.current.pollution.aqius; // Extract AQI value
-                    console.log(aqius);
+                    aqius = data.data.current.pollution.aqius;
+                    const aqiLevel = getAQILevel(aqius);
+                    adjustSynthParameters(aqiLevel);
                 } catch (error) {
-                    console.error(error);
-                    aqius = null;
+                    console.error('Error fetching AQI:', error);
                 }
-            }
-        }, canvasRef.current);
+            };
+
+            // Update AQI every minute
+            setInterval(updateAQI, 60000);
+            updateAQI(); // Initial update
+        });
 
         sketchRef.current = sketch;
 
         return () => {
             if (sketchRef.current) {
-                sketchRef.current.remove(); // Clean up the p5.js sketch
-            }
-            if (synthRef.current) {
-                synthRef.current.dispose(); // Dispose of the Tone.js synth
+                sketchRef.current.remove();
             }
         };
-    }, [currentCity]);
+    }, [currentCity, isPlaying]);
 
-    // Function to start audio context
     const startAudio = async () => {
-        await Tone.start();
-        console.log('Audio is ready');
+        try {
+            await Tone.start();
+            console.log('Audio is ready');
+            setIsPlaying(!isPlaying);
+        } catch (error) {
+            console.error('Error starting audio:', error);
+        }
     };
 
     return (
@@ -186,22 +328,22 @@ const AirMusicVisualizer = () => {
             <div className="absolute top-4 right-4 flex gap-2 z-10">
                 <button
                     onClick={startAudio}
-                    className="px-4 py-2 rounded-lg bg-green-500 text-white mr-4"
+                    className={`px-4 py-2 rounded-lg ${
+                        isPlaying ? 'bg-red-500' : 'bg-green-500'
+                    } text-white mr-4`}
                 >
-                    Start Audio
+                    {isPlaying ? 'Stop Audio' : 'Start Audio'}
                 </button>
-                {['Bangkok', 'HongKong', 'Beijing', 'Melbourne'].map(city => (
-                    <button
-                        key={city}
-                        onClick={() => setCurrentCity(city)}
-                        className={`px-4 py-2 rounded-lg ${currentCity === city
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-blue-500 text-white opacity-75 hover:opacity-100'
-                            }`}
-                    >
-                        {city}
-                    </button>
-                ))}
+                <select
+                    value={currentCity}
+                    onChange={(e) => setCurrentCity(e.target.value)}
+                    className="px-4 py-2 rounded-lg bg-gray-700 text-white"
+                >
+                    <option value="HongKong">Hong Kong</option>
+                    <option value="Bangkok">Bangkok</option>
+                    <option value="Beijing">Beijing</option>
+                    <option value="Melbourne">Melbourne</option>
+                </select>
             </div>
         </div>
     );
