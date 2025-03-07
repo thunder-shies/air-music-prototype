@@ -19,6 +19,26 @@ const Airphonic = () => {
         co: 0
     });
 
+    const fakeAQData = {
+        Beijing: {
+            aqius: 150,
+            pm25: 75,
+            pm10: 110,
+            so2: 40,
+            no2: 60,
+            o3: 50,
+            co: 1000
+        },
+        Melbourne: {
+            aqius: 45,
+            pm25: 15,
+            pm10: 25,
+            so2: 20,
+            no2: 30,
+            o3: 25,
+            co: 500
+        }
+    };
 
     // Separate synth for pollutant buttons
     const buttonSynthRef = useRef(null);
@@ -585,15 +605,22 @@ const Airphonic = () => {
     }, []);
 
     // 1. New useEffect: Fetch data from server.js periodically
+
     useEffect(() => {
         const fetchData = async () => {
             try {
+                // Use fake data for Beijing and Melbourne
+                if (currentCity === 'Beijing' || currentCity === 'Melbourne') {
+                    setAqData(fakeAQData[currentCity]);
+                    return;
+                }
+
+                // Fetch real data for other cities
                 const response = await fetch(`https://airphonic.onrender.com/api/get-latest?city=${currentCity}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const result = await response.json();
-                // Map the returned array into your state object structure
                 const formattedData = {
                     aqius: result.find(item => item.name === "aqius")?.value || aqData.aqius,
                     pm25: result.find(item => item.name === "pm25")?.value || aqData.pm25,
