@@ -9,7 +9,7 @@ const Airphonic = () => {
     const [hasStartedAudio, setHasStartedAudio] = useState(false);
     const instrumentsRef = useRef({});
     const synthRef = useRef(null);
-    const [aqData, setAqiData] = useState({
+    const [aqData, setAqData] = useState({
         aqius: 0,
         pm25: 0,
         pm10: 0,
@@ -373,6 +373,24 @@ const Airphonic = () => {
                     this.speed = p.random(-2, 2);
                     this.size = 5;
                     this.life = 255;
+                    // Store initial color values
+                    this.setInitialColor();
+                }
+
+                setInitialColor() {
+                    if (aqData.aqius <= 50) {
+                        this.r = 156; this.g = 216; this.b = 78;
+                    } else if (aqData.aqius <= 100) {
+                        this.r = 250; this.g = 207; this.b = 57;
+                    } else if (aqData.aqius <= 150) {
+                        this.r = 243; this.g = 114; this.b = 73;
+                    } else if (aqData.aqius <= 200) {
+                        this.r = 246; this.g = 94; this.b = 95;
+                    } else if (aqData.aqius <= 300) {
+                        this.r = 160; this.g = 112; this.b = 182;
+                    } else {
+                        this.r = 246; this.g = 94; this.b = 95;
+                    }
                 }
 
                 update() {
@@ -384,19 +402,12 @@ const Airphonic = () => {
 
                 display() {
                     p.noStroke();
-                    if (aqData.aqius <= 50) {
-                        p.fill(156, 216, 78, this.life);
-                    } else if (aqData.aqius <= 100) {
-                        p.fill(250, 207, 57, this.life);
-                    } else if (aqData.aqius <= 150) {
-                        p.fill(243, 114, 73, this.life);
-                    } else if (aqData.aqius <= 200) {
-                        p.fill(246, 94, 95, this.life);
-                    } else if (aqData.aqius <= 300) {
-                        p.fill(160, 112, 182, this.life);
-                    } else {
-                        p.fill(246, 94, 95, this.life);
-                    }
+                    // Calculate current color based on life
+                    const saturationFactor = this.life / 255;
+                    const r = p.lerp(255, this.r, saturationFactor);
+                    const g = p.lerp(255, this.g, saturationFactor);
+                    const b = p.lerp(255, this.b, saturationFactor);
+                    p.fill(r, g, b, this.life);
                     p.circle(this.x, this.y, this.size);
                 }
 
@@ -411,7 +422,7 @@ const Airphonic = () => {
             };
 
             p.draw = () => {
-                p.background(0, 25);
+                // p.background(0, 25);
 
                 if (isPlaying && p.frameCount % 30 === 0) {
                     particles.push(new Particle(
@@ -494,7 +505,7 @@ const Airphonic = () => {
             }
 
             // Update pollutant value in aqData state
-            setAqiData(prev => ({
+            setAqData(prev => ({
                 ...prev,
                 [pollutant]: pollutantLevels[pollutant].levels[level].value
             }));
@@ -592,7 +603,7 @@ const Airphonic = () => {
                     o3: result.find(item => item.name === "o3")?.value || aqData.o3,
                     co: result.find(item => item.name === "co")?.value || aqData.co,
                 };
-                setAqiData(formattedData);
+                setAqData(formattedData);
             } catch (error) {
                 console.error('Error fetching air quality data:', error);
             }
