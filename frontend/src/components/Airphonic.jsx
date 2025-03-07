@@ -589,7 +589,7 @@ const Airphonic = () => {
                         sustain: 0.3,
                         release: 1
                     },
-                    volume: -8
+                    volume: 0 // Increase the volume
                 }).connect(reverb);
             }
         };
